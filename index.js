@@ -956,22 +956,44 @@ async function setupSelfPolling() {
     console.log('APP_URL environment variable not set. Self-polling disabled.');
     return;
   }
-
+  
   console.log(`Setting up self-polling for URL: ${appUrl}`);
-
+  
   // Add a ping endpoint that just returns 200 OK
   app.get('/ping', (req, res) => {
     res.status(200).send('OK');
   });
-
-  // Set up a cron job to ping the server every 5 minutes
-  cron.schedule('*/5 * * * *', async () => {
+  
+  // Add more frequent pinging using setTimeout instead of cron
+  // This will ping every 40 seconds to prevent the 50-second timeout
+  const pingInterval = 40 * 1000; // 40 seconds in milliseconds
+  
+  // Function to ping the server
+  const pingServer = async () => {
     try {
       console.log(`Pinging self at ${appUrl}/ping to prevent sleep...`);
       const response = await axios.get(`${appUrl}/ping`);
       console.log(`Self-ping successful (${response.status})`);
     } catch (error) {
       console.error('Error pinging self:', error.message);
+    }
+    
+    // Schedule the next ping
+    setTimeout(pingServer, pingInterval);
+  };
+  
+  // Start the pinging process
+  console.log(`Starting self-ping every ${pingInterval/1000} seconds`);
+  setTimeout(pingServer, pingInterval);
+  
+  // Keep the cron job as a backup (every 5 minutes)
+  cron.schedule('*/5 * * * *', async () => {
+    console.log('Backup cron job running self-ping check...');
+    try {
+      const response = await axios.get(`${appUrl}/ping`);
+      console.log(`Backup cron self-ping successful (${response.status})`);
+    } catch (error) {
+      console.error('Error in backup cron self-ping:', error.message);
     }
   });
 }
