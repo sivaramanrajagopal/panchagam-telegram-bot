@@ -1,4 +1,4 @@
-// Complete index.js file with webhook mode and improved self-polling
+// Complete index.js file for Panchagam Telegram Bot
 const { Telegraf } = require('telegraf');
 const { createClient } = require('@supabase/supabase-js');
 const moment = require('moment-timezone');
@@ -1051,81 +1051,50 @@ app.get('/ping', (req, res) => {
   res.status(200).send('OK');
 });
 
-// Use webhook mode on Render
+// Completely disable polling mode and always use webhook on Render
 const secretPath = `/telegraf/${bot.secretPathComponent()}`;
-const webhookUrl = appUrl ? `${appUrl}${secretPath}` : null;
 
-// Setup webhook mode for production (Render)
-if (process.env.NODE_ENV === 'production' || process.env.RENDER) {
-  console.log('Running in production mode - using webhook');
+// Set up webhook mode
+app.use(bot.webhookCallback(secretPath));
+
+// Start express server
+app.listen(port, async () => {
+  console.log(`Server is running on port ${port}`);
   
-  // Set up webhook
-  app.use(bot.webhookCallback(secretPath));
-  
-  // Start express server first
-  app.listen(port, async () => {
-    console.log(`Server is running on port ${port}`);
+  // Set webhook if APP_URL is available
+  if (appUrl) {
+    const webhookUrl = `${appUrl}${secretPath}`;
+    console.log(`Setting webhook URL: ${webhookUrl}`);
     
-    if (webhookUrl) {
-      console.log(`Setting webhook URL: ${webhookUrl}`);
-      
-      try {
-        // Set webhook
-        await bot.telegram.setWebhook(webhookUrl);
-        console.log('Webhook set successfully!');
-        
-        // Record start time for uptime calculation
-        startTime = new Date();
-        
-        // Test the database connection
-        const isConnected = await testDatabaseConnection();
-        if (!isConnected) {
-          console.error('⚠️ WARNING: Database connection test failed. Bot may not work correctly.');
-        } else {
-          console.log('✅ Database connection successful! Bot is ready.');
-        }
-        
-        // Set up notifications
-        setupNotifications();
-        
-        // Set up self-polling
-        setupSelfPolling();
-        
-      } catch (error) {
-        console.error('Error setting webhook:', error);
-      }
-    } else {
-      console.error('Error: APP_URL not set. Cannot set webhook URL.');
+    try {
+      // Set webhook
+      await bot.telegram.setWebhook(webhookUrl);
+      console.log('Webhook set successfully!');
+    } catch (error) {
+      console.error('Error setting webhook:', error);
     }
-  });
-} else {
-  // Use polling mode in development
-  console.log('Running in development mode - using polling');
+  } else {
+    console.warn('Warning: APP_URL environment variable not set. Webhook cannot be configured.');
+    console.warn('The bot will still work for incoming webhook requests if they are properly set up.');
+  }
   
-  // Start the bot using polling mode
-  bot.launch().then(async () => {
-    console.log('Panchagam Bot is starting with polling mode...');
-    startTime = new Date(); // Record start time for uptime calculation
-    
-    // Test the database connection
-    const isConnected = await testDatabaseConnection();
-    if (!isConnected) {
-      console.error('⚠️ WARNING: Database connection test failed. Bot may not work correctly.');
-    } else {
-      console.log('✅ Database connection successful! Bot is ready.');
-    }
-    
-    // Set up notifications
-    setupNotifications();
-    
-    // Start express server
-    app.listen(port, () => {
-      console.log(`Server is running on port ${port}`);
-    });
-  }).catch(err => {
-    console.error('Failed to start bot with polling:', err);
-  });
-}
+  // Record start time for uptime calculation
+  startTime = new Date();
+  
+  // Test the database connection
+  const isConnected = await testDatabaseConnection();
+  if (!isConnected) {
+    console.error('⚠️ WARNING: Database connection test failed. Bot may not work correctly.');
+  } else {
+    console.log('✅ Database connection successful! Bot is ready.');
+  }
+  
+  // Set up notifications
+  setupNotifications();
+  
+  // Set up self-polling
+  setupSelfPolling();
+});
 
 // Enable graceful stop
 process.once('SIGINT', () => bot.stop('SIGINT'));
