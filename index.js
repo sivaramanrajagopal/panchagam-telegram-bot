@@ -1,6 +1,4 @@
-// Complete index.js with improved message formatting
-// Complete bot code for Render deployment with enhanced notification system
-
+// Complete index.js file with webhook mode and improved self-polling
 const { Telegraf } = require('telegraf');
 const { createClient } = require('@supabase/supabase-js');
 const moment = require('moment-timezone');
@@ -10,9 +8,12 @@ const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 
-// Initialize express app (for keep-alive)
+// Initialize express app (for keep-alive and webhook)
 const app = express();
 const port = process.env.PORT || 3000;
+
+// Enable JSON parsing for webhook
+app.use(express.json());
 
 // Initialize bot and database
 const bot = new Telegraf(process.env.BOT_TOKEN);
@@ -84,9 +85,9 @@ const getTimeFromRange = (timeRange) => {
 // Function to safely parse JSON or use the object directly
 const safelyParseJSON = (jsonData) => {
   if (!jsonData) return null;
-
+  
   if (typeof jsonData === 'object') return jsonData;
-
+  
   try {
     return JSON.parse(jsonData);
   } catch (e) {
@@ -98,19 +99,19 @@ const safelyParseJSON = (jsonData) => {
 // Test the database connection on startup
 async function testDatabaseConnection() {
   console.log('Testing database connection...');
-
+  
   try {
     // Using the correct table name
     const { data, error } = await supabase
       .from(TABLE_NAME)
       .select('date')
       .limit(1);
-
+    
     if (error) {
       console.error('Database connection failed:', error);
       return false;
     }
-
+    
     console.log('Database connection successful!');
     if (data && data.length > 0) {
       console.log('Sample date:', data[0].date);
@@ -128,24 +129,24 @@ async function testDatabaseConnection() {
 const getPanchagamForDate = async (date) => {
   const formattedDate = moment(date).format('YYYY-MM-DD');
   console.log(`Querying for date: ${formattedDate}`);
-
+  
   try {
     // Using the correct table name
     const { data, error } = await supabase
       .from(TABLE_NAME)
       .select('*')
       .eq('date', formattedDate);
-
+    
     if (error) {
       console.error('Database query error:', error);
       return null;
     }
-
+    
     if (!data || data.length === 0) {
       console.log(`No data found for date: ${formattedDate}`);
       return null;
     }
-
+    
     console.log(`Found data for date: ${formattedDate}`);
     return data[0];
   } catch (e) {
@@ -154,14 +155,14 @@ const getPanchagamForDate = async (date) => {
   }
 };
 
-// Updated function to format panchagam message with better spacing
+// Improved function to format panchagam message with better spacing
 const formatPanchagamMessage = (data) => {
   if (!data) return 'No Panchagam data available for this date.';
-
+  
   // Extract basic information
   const date = moment(data.date).format('DD-MM-YYYY');
   const day = data.vaara;
-
+  
   // Extract nakshatra information
   let nakshatra = 'N/A';
   try {
@@ -172,7 +173,7 @@ const formatPanchagamMessage = (data) => {
   } catch (e) {
     console.error('Error extracting nakshatra:', e);
   }
-
+  
   // Extract tithi information
   let tithi = 'N/A';
   try {
@@ -183,7 +184,7 @@ const formatPanchagamMessage = (data) => {
   } catch (e) {
     console.error('Error extracting tithi:', e);
   }
-
+  
   // Extract chandrashtama information
   let chandrashtama = 'None';
   try {
@@ -194,9 +195,8 @@ const formatPanchagamMessage = (data) => {
   } catch (e) {
     console.error('Error extracting chandrashtama:', e);
   }
-
+  
   // Build the message with improved spacing
-  // Notice the careful positioning of line breaks and spacing
   const message = `📅 *DAILY PANCHAGAM - ${date} (${day})*
 
 ⏰ *TIMINGS*
@@ -233,7 +233,7 @@ bot.command('start', (ctx) => {
     savePreferences(); // Save after creating new user preferences
     console.log(`Added new user: ${ctx.from.id} (${ctx.from.username || 'no username'})`);
   }
-
+  
   return ctx.reply(
     `🙏 Welcome to Panchagam Bot!\n\nI'll help you keep track of daily Panchagam information and send you timely notifications about important periods.\n\nUse the keyboard below to navigate:`,
     {
@@ -251,22 +251,22 @@ bot.command('start', (ctx) => {
 bot.hears('📆 Today\'s Panchagam', async (ctx) => {
   const today = moment().tz(TIMEZONE).startOf('day');
   const data = await getPanchagamForDate(today);
-
+  
   if (!data) {
     return ctx.reply('Sorry, I couldn\'t retrieve today\'s Panchagam information.');
   }
-
+  
   return ctx.replyWithMarkdown(formatPanchagamMessage(data));
 });
 
 bot.hears('📅 Tomorrow\'s Panchagam', async (ctx) => {
   const tomorrow = moment().tz(TIMEZONE).add(1, 'day').startOf('day');
   const data = await getPanchagamForDate(tomorrow);
-
+  
   if (!data) {
     return ctx.reply('Sorry, I couldn\'t retrieve tomorrow\'s Panchagam information.');
   }
-
+  
   return ctx.replyWithMarkdown(formatPanchagamMessage(data));
 });
 
@@ -277,12 +277,12 @@ bot.hears('⚙️ Notification Settings', (ctx) => {
     notifyChandrashtama: true,
     notifyDaily: true
   };
-
+  
   if (!userPreferences[ctx.from.id]) {
     userPreferences[ctx.from.id] = prefs;
     savePreferences(); // Save if creating new preferences
   }
-
+  
   return ctx.reply(
     'Notification Settings:',
     {
@@ -351,11 +351,11 @@ bot.command('testdaily', async (ctx) => {
   try {
     const today = moment().tz(TIMEZONE).startOf('day');
     const data = await getPanchagamForDate(today);
-
+    
     if (!data) {
       return ctx.reply('❌ No data found for today.');
     }
-
+    
     // Save the user's ID to preferences if not already there
     if (!userPreferences[ctx.from.id]) {
       userPreferences[ctx.from.id] = {
@@ -367,10 +367,10 @@ bot.command('testdaily', async (ctx) => {
       savePreferences();
       console.log(`Added new user from testdaily: ${ctx.from.id} (${ctx.from.username || 'no username'})`);
     }
-
+    
     // Send a test notification
     ctx.replyWithMarkdown(`🌞 *TEST NOTIFICATION* \n\nGood Morning! Here's your daily Panchagam update:\n\n${formatPanchagamMessage(data)}`);
-
+    
     return ctx.reply('✅ Test notification sent! Your user ID has been saved for future notifications.');
   } catch (e) {
     console.error('Error in test notification:', e);
@@ -382,15 +382,15 @@ bot.command('testrahu', async (ctx) => {
   try {
     const today = moment().tz(TIMEZONE).startOf('day');
     const data = await getPanchagamForDate(today);
-
+    
     if (!data) {
       return ctx.reply('❌ No data found for today.');
     }
-
+    
     if (!data.rahu_kalam) {
       return ctx.reply('❌ No Rahu Kalam information found for today.');
     }
-
+    
     // Save the user's ID to preferences if not already there
     if (!userPreferences[ctx.from.id]) {
       userPreferences[ctx.from.id] = {
@@ -402,16 +402,16 @@ bot.command('testrahu', async (ctx) => {
       savePreferences();
       console.log(`Added new user from testrahu: ${ctx.from.id} (${ctx.from.username || 'no username'})`);
     }
-
+    
     // Extract Rahu Kalam time
     const rahuKalamTime = getTimeFromRange(data.rahu_kalam);
     if (!rahuKalamTime) {
       return ctx.reply('❌ Could not parse Rahu Kalam time.');
     }
-
+    
     // Send a test notification
     ctx.replyWithMarkdown(`⚠️ *TEST: Rahu Kalam Alert*\nRahu Kalam will begin in 15 minutes (${formatTime(rahuKalamTime.start)} to ${formatTime(rahuKalamTime.end)}). Plan your activities accordingly.`);
-
+    
     return ctx.reply('✅ Test Rahu Kalam notification sent! Your user ID has been saved for future notifications.');
   } catch (e) {
     console.error('Error in test notification:', e);
@@ -423,11 +423,11 @@ bot.command('testrahu', async (ctx) => {
 bot.command('myprefs', (ctx) => {
   const userId = ctx.from.id;
   const prefs = userPreferences[userId];
-
+  
   if (!prefs) {
     return ctx.reply('❌ You don\'t have any saved preferences. Use /start to set up notifications.');
   }
-
+  
   return ctx.reply(`Your notification preferences:\n\nRahu Kalam: ${prefs.notifyRahuKalam ? '✅' : '❌'}\nYamagandam: ${prefs.notifyYamagandam ? '✅' : '❌'}\nChandrashtama: ${prefs.notifyChandrashtama ? '✅' : '❌'}\nDaily: ${prefs.notifyDaily ? '✅' : '❌'}\n\nYour User ID: ${userId}`);
 });
 
@@ -437,12 +437,12 @@ bot.command('stats', (ctx) => {
   const notificationsEnabled = Object.values(userPreferences)
     .filter(p => p.notifyDaily || p.notifyRahuKalam || p.notifyYamagandam || p.notifyChandrashtama)
     .length;
-
+  
   const dailyEnabled = Object.values(userPreferences).filter(p => p.notifyDaily).length;
   const rahuEnabled = Object.values(userPreferences).filter(p => p.notifyRahuKalam).length;
   const yamaEnabled = Object.values(userPreferences).filter(p => p.notifyYamagandam).length;
   const chandrashtamaEnabled = Object.values(userPreferences).filter(p => p.notifyChandrashtama).length;
-
+  
   return ctx.reply(`📊 *Bot Statistics*\n\nTotal Users: ${userCount}\nUsers with any notifications: ${notificationsEnabled}\n\nNotification Types:\n- Daily: ${dailyEnabled}\n- Rahu Kalam: ${rahuEnabled}\n- Yamagandam: ${yamaEnabled}\n- Chandrashtama: ${chandrashtamaEnabled}\n\nBot uptime: ${formatUptime()}`, 
     { parse_mode: 'Markdown' });
 });
@@ -454,51 +454,51 @@ function formatUptime() {
   const days = Math.floor(uptime / (1000 * 60 * 60 * 24));
   const hours = Math.floor((uptime % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
   const minutes = Math.floor((uptime % (1000 * 60 * 60)) / (1000 * 60));
-
+  
   return `${days}d ${hours}h ${minutes}m`;
 }
 
 // Add test command to check database connection
 bot.command('test', async (ctx) => {
   ctx.reply('Testing database connection...');
-
+  
   const testConnected = await testDatabaseConnection();
-
+  
   if (!testConnected) {
     return ctx.reply('❌ Database connection failed. Please check your credentials and try again.');
   }
-
+  
   // Check if we can get data for today
   const today = moment().tz(TIMEZONE).startOf('day');
   const todayFormatted = today.format('YYYY-MM-DD');
-
+  
   const { data, error } = await supabase
     .from(TABLE_NAME)
     .select('*')
     .eq('date', todayFormatted);
-
+  
   if (error) {
     return ctx.reply(`❌ Error querying today's date: ${error.message}`);
   }
-
+  
   if (!data || data.length === 0) {
     // Try to get any date to confirm the database has data
     const { data: anyData, error: anyError } = await supabase
       .from(TABLE_NAME)
       .select('date')
       .limit(5);
-
+    
     if (anyError) {
       return ctx.reply(`❌ Error querying any dates: ${anyError.message}`);
     }
-
+    
     if (!anyData || anyData.length === 0) {
       return ctx.reply('✅ Database connection works, but no data found in the table.');
     }
-
+    
     return ctx.reply(`✅ Database works! No data for today (${todayFormatted}), but found data for other dates: ${anyData.map(d => d.date).join(', ')}`);
   }
-
+  
   return ctx.reply(`✅ Success! Found data for today (${todayFormatted}).\nNakshatra: ${typeof data[0].nakshatra === 'string' ? 'JSON string' : 'JSON object'}`);
 });
 
@@ -506,22 +506,22 @@ bot.command('test', async (ctx) => {
 bot.command('today', async (ctx) => {
   const today = moment().tz(TIMEZONE).startOf('day');
   const data = await getPanchagamForDate(today);
-
+  
   if (!data) {
     return ctx.reply('Sorry, I couldn\'t retrieve today\'s Panchagam information.');
   }
-
+  
   return ctx.replyWithMarkdown(formatPanchagamMessage(data));
 });
 
 bot.command('tomorrow', async (ctx) => {
   const tomorrow = moment().tz(TIMEZONE).add(1, 'day').startOf('day');
   const data = await getPanchagamForDate(tomorrow);
-
+  
   if (!data) {
     return ctx.reply('Sorry, I couldn\'t retrieve tomorrow\'s Panchagam information.');
   }
-
+  
   return ctx.replyWithMarkdown(formatPanchagamMessage(data));
 });
 
@@ -533,12 +533,12 @@ bot.command('settings', async (ctx) => {
     notifyChandrashtama: true,
     notifyDaily: true
   };
-
+  
   if (!userPreferences[ctx.from.id]) {
     userPreferences[ctx.from.id] = prefs;
     savePreferences(); // Save if creating new preferences
   }
-
+  
   return ctx.reply(
     'Notification Settings:',
     {
@@ -585,10 +585,10 @@ bot.action('toggle_rahu_kalam', (ctx) => {
       notifyDaily: true
     };
   }
-
+  
   userPreferences[userId].notifyRahuKalam = !userPreferences[userId].notifyRahuKalam;
   savePreferences(); // Save after updating preferences
-
+  
   // Update the keyboard
   const prefs = userPreferences[userId];
   ctx.editMessageReplyMarkup({
@@ -619,7 +619,7 @@ bot.action('toggle_rahu_kalam', (ctx) => {
       ]
     ]
   });
-
+  
   return ctx.answerCbQuery(`Rahu Kalam notifications ${prefs.notifyRahuKalam ? 'enabled' : 'disabled'}`);
 });
 
@@ -633,10 +633,10 @@ bot.action('toggle_yamagandam', (ctx) => {
       notifyDaily: true
     };
   }
-
+  
   userPreferences[userId].notifyYamagandam = !userPreferences[userId].notifyYamagandam;
   savePreferences(); // Save after updating preferences
-
+  
   // Update the keyboard
   const prefs = userPreferences[userId];
   ctx.editMessageReplyMarkup({
@@ -667,7 +667,7 @@ bot.action('toggle_yamagandam', (ctx) => {
       ]
     ]
   });
-
+  
   return ctx.answerCbQuery(`Yamagandam notifications ${prefs.notifyYamagandam ? 'enabled' : 'disabled'}`);
 });
 
@@ -681,10 +681,10 @@ bot.action('toggle_chandrashtama', (ctx) => {
       notifyDaily: true
     };
   }
-
+  
   userPreferences[userId].notifyChandrashtama = !userPreferences[userId].notifyChandrashtama;
   savePreferences(); // Save after updating preferences
-
+  
   // Update the keyboard
   const prefs = userPreferences[userId];
   ctx.editMessageReplyMarkup({
@@ -715,7 +715,7 @@ bot.action('toggle_chandrashtama', (ctx) => {
       ]
     ]
   });
-
+  
   return ctx.answerCbQuery(`Chandrashtama notifications ${prefs.notifyChandrashtama ? 'enabled' : 'disabled'}`);
 });
 
@@ -729,10 +729,10 @@ bot.action('toggle_daily', (ctx) => {
       notifyDaily: true
     };
   }
-
+  
   userPreferences[userId].notifyDaily = !userPreferences[userId].notifyDaily;
   savePreferences(); // Save after updating preferences
-
+  
   // Update the keyboard
   const prefs = userPreferences[userId];
   ctx.editMessageReplyMarkup({
@@ -763,32 +763,32 @@ bot.action('toggle_daily', (ctx) => {
       ]
     ]
   });
-
+  
   return ctx.answerCbQuery(`Daily notifications ${prefs.notifyDaily ? 'enabled' : 'disabled'}`);
 });
 
 // Notification system with cron jobs
 function setupNotifications() {
   console.log('Setting up notification system...');
-
+  
   // Daily morning notification at 6:00 AM
   cron.schedule('0 6 * * *', async () => {
     console.log('Running daily notification cron job');
     const today = moment().tz(TIMEZONE).startOf('day');
     const data = await getPanchagamForDate(today);
-
+    
     if (!data) {
       console.error('Failed to fetch panchagam data for daily notification');
       return;
     }
-
+    
     // Send to all users who have daily notifications enabled
     const usersWithDaily = Object.entries(userPreferences).filter(([_, prefs]) => prefs.notifyDaily);
     console.log(`Sending daily notifications to ${usersWithDaily.length} users`);
-
+    
     let successCount = 0;
     let errorCount = 0;
-
+    
     for (const [userId, prefs] of usersWithDaily) {
       try {
         await bot.telegram.sendMessage(
@@ -802,47 +802,47 @@ function setupNotifications() {
         errorCount++;
       }
     }
-
+    
     console.log(`Daily notifications: ${successCount} sent, ${errorCount} failed`);
   }, {
     timezone: TIMEZONE
   });
-
+  
   // Check every 5 minutes for upcoming important periods
   cron.schedule('*/5 * * * *', async () => {
     console.log('Running period notification check');
     const now = moment().tz(TIMEZONE);
     const today = now.clone().startOf('day');
     const data = await getPanchagamForDate(today);
-
+    
     if (!data) {
       console.log('No data found for today in period notification check');
       return;
     }
-
+    
     // Function to check if a period starts in 15 minutes
     const shouldSendNotification = (periodTimeStr) => {
       if (!periodTimeStr) return false;
-
+      
       const periodTime = getTimeFromRange(periodTimeStr);
       if (!periodTime) return false;
-
+      
       // Check if the period starts in 15 minutes (with a small buffer)
       const minutesUntilStart = periodTime.start.diff(now, 'minutes');
       return minutesUntilStart >= 14 && minutesUntilStart <= 16;
     };
-
+    
     let notificationsSent = 0;
-
+    
     // Check for Rahu Kalam
     if (shouldSendNotification(data.rahu_kalam)) {
       const rahuKalamTime = getTimeFromRange(data.rahu_kalam);
-
+      
       const usersWithRahuKalam = Object.entries(userPreferences)
         .filter(([_, prefs]) => prefs.notifyRahuKalam);
-
+      
       console.log(`Sending Rahu Kalam notifications to ${usersWithRahuKalam.length} users`);
-
+      
       for (const [userId, prefs] of usersWithRahuKalam) {
         try {
           await bot.telegram.sendMessage(
@@ -856,16 +856,16 @@ function setupNotifications() {
         }
       }
     }
-
+    
     // Check for Yamagandam
     if (shouldSendNotification(data.yamagandam)) {
       const yamagandamTime = getTimeFromRange(data.yamagandam);
-
+      
       const usersWithYamagandam = Object.entries(userPreferences)
         .filter(([_, prefs]) => prefs.notifyYamagandam);
-
+      
       console.log(`Sending Yamagandam notifications to ${usersWithYamagandam.length} users`);
-
+      
       for (const [userId, prefs] of usersWithYamagandam) {
         try {
           await bot.telegram.sendMessage(
@@ -879,16 +879,16 @@ function setupNotifications() {
         }
       }
     }
-
+    
     // Check for Kuligai
     if (shouldSendNotification(data.kuligai)) {
       const kuligaiTime = getTimeFromRange(data.kuligai);
-
+      
       const usersWithRahuKalam = Object.entries(userPreferences)
         .filter(([_, prefs]) => prefs.notifyRahuKalam); // Using same preference as Rahu Kalam
-
+      
       console.log(`Sending Kuligai notifications to ${usersWithRahuKalam.length} users`);
-
+      
       for (const [userId, prefs] of usersWithRahuKalam) {
         try {
           await bot.telegram.sendMessage(
@@ -902,16 +902,16 @@ function setupNotifications() {
         }
       }
     }
-
+    
     // Check for Abhijit Muhurta
     if (shouldSendNotification(data.abhijit_muhurta)) {
       const abhijitTime = getTimeFromRange(data.abhijit_muhurta);
-
+      
       const usersWithDaily = Object.entries(userPreferences)
         .filter(([_, prefs]) => prefs.notifyDaily); // Using daily notification preference
-
+      
       console.log(`Sending Abhijit Muhurta notifications to ${usersWithDaily.length} users`);
-
+      
       for (const [userId, prefs] of usersWithDaily) {
         try {
           await bot.telegram.sendMessage(
@@ -925,32 +925,32 @@ function setupNotifications() {
         }
       }
     }
-
+    
     if (notificationsSent > 0) {
       console.log(`Sent ${notificationsSent} period notifications`);
     }
   }, {
     timezone: TIMEZONE
   });
-
+  
   // Add a self-checking notification system
   cron.schedule('*/10 * * * *', () => {
     console.log('Running self-check (every 10 minutes)');
-
+    
     // Log the number of users
     const userCount = Object.keys(userPreferences).length;
     console.log(`Currently have ${userCount} users with preferences`);
-
+    
     // Current time in Indian timezone
     const now = moment().tz(TIMEZONE);
     console.log(`Current time in ${TIMEZONE}: ${now.format('YYYY-MM-DD HH:mm:ss')}`);
   });
 }
 
-// Set up self-polling to keep the service alive
+// Get app URL for self-polling
 let appUrl = process.env.APP_URL || null;
 
-// Function to ping the app every 5 minutes to keep it alive
+// Function to ping the app frequently to keep it alive
 async function setupSelfPolling() {
   if (!appUrl) {
     console.log('APP_URL environment variable not set. Self-polling disabled.');
@@ -985,24 +985,13 @@ async function setupSelfPolling() {
   // Start the pinging process
   console.log(`Starting self-ping every ${pingInterval/1000} seconds`);
   setTimeout(pingServer, pingInterval);
-  
-  // Keep the cron job as a backup (every 5 minutes)
-  cron.schedule('*/5 * * * *', async () => {
-    console.log('Backup cron job running self-ping check...');
-    try {
-      const response = await axios.get(`${appUrl}/ping`);
-      console.log(`Backup cron self-ping successful (${response.status})`);
-    } catch (error) {
-      console.error('Error in backup cron self-ping:', error.message);
-    }
-  });
 }
 
 // Set up simple express server for health checks and to keep the app alive
 app.get('/', (req, res) => {
   const uptime = formatUptime();
   const userCount = Object.keys(userPreferences).length;
-
+  
   res.send(`
     <html>
       <head>
@@ -1023,7 +1012,7 @@ app.get('/', (req, res) => {
           <h2 class="success">✅ Bot is running!</h2>
           <p>Uptime: ${uptime}</p>
         </div>
-
+        
         <h2>Statistics</h2>
         <div class="stats">
           <div class="stat-card">
@@ -1036,7 +1025,7 @@ app.get('/', (req, res) => {
             <p>Indian time: ${moment().tz(TIMEZONE).format('YYYY-MM-DD HH:mm:ss')}</p>
           </div>
         </div>
-
+        
         <div class="footer">
           <p>Tamil Panchagam Bot | Created with Telegraf</p>
         </div>
@@ -1062,32 +1051,81 @@ app.get('/ping', (req, res) => {
   res.status(200).send('OK');
 });
 
-// Start the bot using polling mode
-bot.launch().then(async () => {
-  console.log('Panchagam Bot is starting...');
-  startTime = new Date(); // Record start time for uptime calculation
+// Use webhook mode on Render
+const secretPath = `/telegraf/${bot.secretPathComponent()}`;
+const webhookUrl = appUrl ? `${appUrl}${secretPath}` : null;
 
-  // Test the database connection
-  const isConnected = await testDatabaseConnection();
-  if (!isConnected) {
-    console.error('⚠️ WARNING: Database connection test failed. Bot may not work correctly.');
-  } else {
-    console.log('✅ Database connection successful! Bot is ready.');
-  }
-
-  // Set up notifications
-  setupNotifications();
-
-  // Set up self-polling
-  setupSelfPolling();
-
-  // Start express server
-  app.listen(port, () => {
+// Setup webhook mode for production (Render)
+if (process.env.NODE_ENV === 'production' || process.env.RENDER) {
+  console.log('Running in production mode - using webhook');
+  
+  // Set up webhook
+  app.use(bot.webhookCallback(secretPath));
+  
+  // Start express server first
+  app.listen(port, async () => {
     console.log(`Server is running on port ${port}`);
+    
+    if (webhookUrl) {
+      console.log(`Setting webhook URL: ${webhookUrl}`);
+      
+      try {
+        // Set webhook
+        await bot.telegram.setWebhook(webhookUrl);
+        console.log('Webhook set successfully!');
+        
+        // Record start time for uptime calculation
+        startTime = new Date();
+        
+        // Test the database connection
+        const isConnected = await testDatabaseConnection();
+        if (!isConnected) {
+          console.error('⚠️ WARNING: Database connection test failed. Bot may not work correctly.');
+        } else {
+          console.log('✅ Database connection successful! Bot is ready.');
+        }
+        
+        // Set up notifications
+        setupNotifications();
+        
+        // Set up self-polling
+        setupSelfPolling();
+        
+      } catch (error) {
+        console.error('Error setting webhook:', error);
+      }
+    } else {
+      console.error('Error: APP_URL not set. Cannot set webhook URL.');
+    }
   });
-}).catch(err => {
-  console.error('Failed to start bot:', err);
-});
+} else {
+  // Use polling mode in development
+  console.log('Running in development mode - using polling');
+  
+  // Start the bot using polling mode
+  bot.launch().then(async () => {
+    console.log('Panchagam Bot is starting with polling mode...');
+    startTime = new Date(); // Record start time for uptime calculation
+    
+    // Test the database connection
+    const isConnected = await testDatabaseConnection();
+    if (!isConnected) {
+      console.error('⚠️ WARNING: Database connection test failed. Bot may not work correctly.');
+    } else {
+      console.log('✅ Database connection successful! Bot is ready.');
+    }
+    
+    // Set up notifications
+    setupNotifications();
+    
+    // Start express server
+    app.listen(port, () => {
+      console.log(`Server is running on port ${port}`);
+    });
+  }).catch(err => {
+    console.error('Failed to start bot with polling:', err);
+  });
+}
 
 // Enable graceful stop
 process.once('SIGINT', () => bot.stop('SIGINT'));
